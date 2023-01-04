@@ -1,5 +1,7 @@
 import { OnInit, Input } from '@angular/core';
 import { Service } from '@wiz/service/service';
+import MonacoEditor from "@wiz/app/core.editor.monaco";
+import toastr from "toastr";
 
 export class Component implements OnInit {
     @Input() editor;
@@ -225,6 +227,102 @@ export class Component implements OnInit {
         });
     }
 
+    private async call(fn, data) {
+        return await wiz.call("", data, { url: `/wiz/ide/api/workspace.app.explore/${fn}` });
+    }
+
+    private addComponentClick(editor) {
+        // pug only
+        if (this.editor.current !== 1) return;
+        editor.onMouseDown(async ({ event, target }) => {
+            const { metaKey, altKey } = event;
+            if (!metaKey && !altKey) return;
+            const text = target.element.textContent.replace(/\s/g, "");
+            const r = /^wiz\-[a-z\-]+/.exec(text);
+            if (!r) return;
+            const appId = r[0].split("-").slice(1).join(".");
+            const { code, data } = await wiz.call("load", { id: appId });
+            if (code !== 200) return;
+
+            const node = {
+                editable: false,
+                extended: false,
+                isLoading: false,
+                level: 1,
+                meta: data,
+                name: data.title,
+                parent: {},
+                path: `src/app/${appId}`,
+                rename: data.title,
+                type: "app",
+            };
+
+            let app = node.meta;
+            let apppath = node.path;
+            let mode = app.id.split(".")[0];
+
+            let editor = this.service.editor.create({
+                component_id: "workspace.app.explore",
+                path: apppath,
+                title: app.title ? app.title : app.namespace,
+                subtitle: app.id,
+                current: 1,
+            });
+
+            editor.namespace_prefix = mode + ".";
+
+            let tabs: any = [
+                editor.create({
+                    name: 'Pug',
+                    viewref: MonacoEditor,
+                    path: node.path + "/view.pug",
+                    config: { monaco: { language: 'pug' } }
+                }),
+                editor.create({
+                    name: 'Component',
+                    viewref: MonacoEditor,
+                    path: node.path + "/view.ts",
+                    config: { monaco: { language: 'typescript', renderValidationDecorations: 'off' } }
+                }),
+                editor.create({
+                    name: 'SCSS',
+                    viewref: MonacoEditor,
+                    path: node.path + "/view.scss",
+                    config: { monaco: { language: 'scss' } }
+                }),
+                editor.create({
+                    name: 'API',
+                    viewref: MonacoEditor,
+                    path: node.path + "/api.py",
+                    config: { monaco: { language: 'python' } }
+                }),
+                editor.create({
+                    name: 'Socket',
+                    viewref: MonacoEditor,
+                    path: node.path + "/socket.py",
+                    config: { monaco: { language: 'python' } }
+                })
+            ];
+
+            for (let i = 0; i < tabs.length; i++) {
+                tabs[i].bind('data', async (tab) => {
+                    editor.meta.info = data;
+                    const res = await this.call("read", {path: tab.path});
+                    if (res.code != 200) return {};
+                    return { data: res.data };
+                }).bind('update', async (tab) => {
+                    let data = await tab.data();
+                    await this.update(tab.path, data.data);
+                });
+            }
+
+            await editor.open(location);
+            setTimeout(() => {
+                Array.from(document.querySelectorAll(".editor-header")).slice(-1)[0].click();
+            }, 100);
+        });
+    }
+
     public async init(e) {
         let editor = this.editor;
         for (let i = 0; i < this.service.shortcuts.length; i++) {
@@ -235,8 +333,22 @@ export class Component implements OnInit {
             this.monacoRecommend();
             window.monacoWIZRecommend = true;
         }
+        this.addComponentClick(e.editor);
 
         editor.meta.monaco = e.editor;
         editor.meta.monaco.focus();
+    }
+
+    private async update(path: string, code: string) {
+        let res = await this.call("update", {path, code});
+        if (["route", "controller", "model", "config"].includes(path.split("/")[1])) {
+            if (res.code == 200) toastr.info("Updated");
+            return
+        }
+
+        if (res.code == 200) toastr.success("Updated");
+        res = await this.call("build", {path});
+        if (res.code == 200) toastr.info("Builded");
+        else toastr.error("Error on build");
     }
 }
