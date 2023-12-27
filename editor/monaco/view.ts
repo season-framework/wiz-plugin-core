@@ -322,8 +322,6 @@ export class Component implements OnInit {
             }
             else if (['portal'].includes(mode)) {
                 const portal = r[0].split("-")[2];
-                console.log(portal, appId);
-
                 let location = this.service.editor.indexOf(this.editor);
                 let neweditor = await this.portalWorkspace.AppEditor(portal, data);
                 await neweditor.open(location + 1);
