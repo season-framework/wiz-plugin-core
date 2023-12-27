@@ -6,7 +6,13 @@ def load():
     workspace = wiz.workspace("service")
     fs = workspace.fs()
     abspath = fs.abspath()
-    res = glob(f'{abspath}/src/*/{id}', recursive=True)
+    root = "src"
+    if id.startswith("portal."):
+        tmp = id.split(".")
+        portal = tmp[1]
+        id = ".".join(id.split(".")[2:])
+        root = f"portal/{portal}"
+    res = glob(f'{abspath}/{root}/*/{id}', recursive=True)
     if len(res) == 0:
         wiz.response.status(404)
     path = res[0]
