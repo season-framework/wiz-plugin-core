@@ -3,8 +3,7 @@ from glob import glob
 
 def load():
     id = wiz.request.query("id", True)
-    workspace = wiz.workspace("service")
-    fs = workspace.fs()
+    fs = wiz.fs()
     abspath = fs.abspath()
     root = "src"
     if id.startswith("portal."):
